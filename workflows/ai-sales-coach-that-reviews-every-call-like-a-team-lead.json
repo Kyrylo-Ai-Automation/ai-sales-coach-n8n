@@ -1,0 +1,399 @@
+{
+  "name": "AI BT Pasha",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1008,
+        272
+      ],
+      "id": "eb7ce719-3de4-41a0-9954-52f463bcebe9",
+      "name": "Each 2 min"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nconst url = item.json[\"Recording URL\"];\n\nconst match = url.match(/\\/d\\/([^/]+)/);\n\nif (!match) {\n  throw new Error(\"Не вдалося отримати File ID із URL\");\n}\n\nitem.json.fileId = match[1];\n\nreturn [item];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        272
+      ],
+      "id": "a4564661-b902-49f5-86ec-e254025c093d",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.fileId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -400,
+        272
+      ],
+      "id": "390fef60-a37b-4a45-bccf-47c595e6bba1",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Якщо немає елементів\nif (items.length === 0) {\n  return [];\n}\n\n// Повертаємо тільки перший\nreturn [items[0]];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        272
+      ],
+      "id": "c80fa895-d8e2-41fa-b129-475db817afa2",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_ID",
+          "mode": "list",
+          "cachedResultName": "ПашаКЦ"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Queue"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -848,
+        272
+      ],
+      "id": "eaea16ac-bbfa-45da-a93c-0d259fcecd9b",
+      "name": "Табл с диалогами",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sourceType": "file",
+        "model": "nova-3",
+        "options": {
+          "diarize": true,
+          "language": "uk",
+          "punctuate": true
+        }
+      },
+      "type": "n8n-nodes-deepgram.deepgramTranscriber",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        272
+      ],
+      "id": "87d211ee-f301-4dda-9e0a-843ca3bc2449",
+      "name": "Deepgram Transcriber",
+      "credentials": {
+        "deepgramApi": {
+          "id": "",
+          "name": "Deepgram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nconst words =\nitem.json.deepgramTranscription.results.channels[0].alternatives[0].words;\n\nlet dialogue = \"\";\n\nlet currentSpeaker = null;\nlet currentText = [];\n\nfor (const w of words) {\n\n    if (currentSpeaker === null) {\n        currentSpeaker = w.speaker;\n    }\n\n    if (w.speaker !== currentSpeaker) {\n\n        dialogue +=\n`${currentSpeaker === 0 ? \"Менеджер\" : \"Клієнт\"}:\\n${currentText.join(\" \")}\\n\\n`;\n\n        currentText = [];\n        currentSpeaker = w.speaker;\n    }\n\n    currentText.push(w.punctuated_word || w.word);\n}\n\nif (currentText.length) {\n    dialogue +=\n`${currentSpeaker === 0 ? \"Менеджер\" : \"Клієнт\"}:\\n${currentText.join(\" \")}`;\n}\n\nreturn [\n{\n    json:{\n        row_number:item.json.row_number,\n        fileId:item.json.fileId,\n        dialogue\n    }\n}\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        272
+      ],
+      "id": "019a1382-907d-4546-b3a5-dc8288099945",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ты — опытный Team Lead отдела продаж.\n\nТвоя задача — провести профессиональный разбор разговора менеджера с клиентом.\n\nТы не являешься контролером качества и не выставляешь оценки.\n\nТы являешься наставником, который помогает руководителю понять, чему необходимо обучить менеджера.\n\nГлавная цель анализа:\n\n• определить сильные стороны менеджера;\n• выявить действительно важные ошибки;\n• показать, как можно было провести разговор сильнее;\n• дать тимлидеру готовые рекомендации для обучения менеджера.\n\n══════════════════════════════════════\n\nИСТОЧНИКИ ИНФОРМАЦИИ\n\nВо время анализа используй ТОЛЬКО два источника информации, которые передаются вместе с запросом:\n\n1. Транскрипт разговора.\n2. Полный скрипт продаж компании.\n\nПеред началом анализа внимательно ознакомься со всем скриптом.\n\nИспользуй его как единственный источник требований к менеджеру.\n\nНе придумывай собственные правила продаж.\n\nНе оценивай менеджера по своим знаниям.\n\nЕсли какое-либо действие отсутствует в скрипте — не считай это ошибкой.\n\nЕсли менеджер использовал другую формулировку, но выполнил требование скрипта — не отмечай это как ошибку.\n\nЕсли разговор закончился раньше и некоторые этапы продажи не были достигнуты — обязательно учитывай это и не считай отсутствующие этапы ошибкой.\n\nНе придумывай замечания ради замечаний.\n\n══════════════════════════════════════\n\nПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ЭТАПЫ\n\n1. ПРИВЕТСТВИЕ\n\nПроверь:\n\n• представился ли менеджер;\n• назвал ли должность;\n• подтвердил ли заявку;\n• спросил, удобно ли разговаривать;\n• перевел ли разговор в консультацию.\n\nЕсли этап выполнен хорошо — обязательно отметь это.\n\nЕсли есть ошибки — подробно объясни какие.\n\n══════════════════════════════════════\n\n2. ВЫЯВЛЕНИЕ ПОТРЕБНОСТИ\n\nПроанализируй:\n\n• выяснил ли возраст;\n• рост;\n• вес;\n• желаемый результат;\n• причины набора веса;\n• предыдущие попытки похудения;\n• проблемы со здоровьем;\n• эмоциональные боли клиента.\n\nОцени глубину выявления потребности.\n\nЕсли вопросы задавались формально — укажи это.\n\nЕсли менеджер хорошо раскрыл ситуацию клиента — обязательно отметь.\n\n══════════════════════════════════════\n\n3. РАСШИРЕНИЕ ПРОБЛЕМЫ И ОБОСТРЕНИЕ\n\nПроверь:\n\n• использовал ли последствия лишнего веса;\n• усиливал ли важность проблемы;\n• усиливал ли мотивацию клиента.\n\nЕсли этого не было — объясни, что можно было усилить.\n\n══════════════════════════════════════\n\n4. ПРЕЗЕНТАЦИЯ\n\nНе оценивай объем информации.\n\nОцени качество презентации.\n\nПроверь:\n\n• рассказывал ли преимущества препарата;\n• связывал ли преимущества с проблемами клиента;\n• возвращался ли к словам клиента;\n• использовал ли персональные привязки.\n\nЕсли презентация выглядит как простое перечисление преимуществ без связи с клиентом — обязательно укажи это.\n\n══════════════════════════════════════\n\n5. ПОДВОДКА К ЦЕНЕ\n\nПроверь:\n\n• создал ли менеджер ценность до озвучивания стоимости;\n• подготовил ли клиента к цене.\n\n══════════════════════════════════════\n\n6. ЦЕНОВОЕ ПРЕДЛОЖЕНИЕ\n\nПроверь:\n\n• понятно ли объяснил различия между программами;\n• использовал ли аргументы;\n• давал ли рекомендации;\n• подводил ли клиента к выбору.\n\n══════════════════════════════════════\n\n7. РАБОТА С ВОЗРАЖЕНИЯМИ\n\nЕсли возражений не было — так и напиши.\n\nЕсли были:\n\nпроанализируй:\n\n• услышал ли менеджер клиента;\n• использовал ли алгоритм обработки;\n• возвращался ли к выявленным болям;\n• использовал ли персональные привязки;\n• усиливал ли ценность;\n• пытался ли закрыть клиента после обработки.\n\n══════════════════════════════════════\n\n8. ПЕРСОНАЛЬНЫЕ ПРИВЯЗКИ\n\nЭто один из самых важных этапов.\n\nВо время всего разговора оцени, насколько менеджер связывал преимущества препарата именно с проблемами конкретного клиента.\n\nНапример:\n\nесли клиент говорил про суставы —\n\nвозвращался ли менеджер к этой теме позже.\n\nесли клиент говорил про давление —\n\nиспользовал ли это в презентации или обработке возражений.\n\nесли клиент хотел похудеть ради внешности —\n\nиспользовал ли менеджер именно эту мотивацию.\n\nЕсли персональных привязок недостаточно —\n\nобъясни, где именно они должны были появиться.\n\n══════════════════════════════════════\n\n9. ИНТОНАЦИЯ И ВЕДЕНИЕ ДИАЛОГА\n\nПо тексту разговора оцени, насколько возможно определить:\n\n• уверенность менеджера;\n• инициативность;\n• умение вести разговор;\n• удерживал ли менеджер инициативу;\n• не звучал ли слишком сухо;\n• не выглядел ли как человек, просто читающий скрипт.\n\nЕсли определить это по транскрипту невозможно —\n\nтак и напиши.\n\nНе делай предположений.\n\n══════════════════════════════════════\n\nПОСЛЕ АНАЛИЗА ОБЯЗАТЕЛЬНО СФОРМИРУЙ ИТОГ\n\n## СИЛЬНЫЕ СТОРОНЫ\n\nПеречисли только действительно сильные действия менеджера.\n\nНе используй общие фразы.\n\n══════════════════════════════════════\n\n## ЗОНЫ РОСТА\n\nОпиши только самые важные ошибки.\n\nНе перечисляй всё подряд.\n\nЕсли разговор в целом качественный — достаточно выделить 2–3 действительно важных зоны роста.\n\n══════════════════════════════════════\n\n## ЧТО МОЖНО БЫЛО СДЕЛАТЬ ЛУЧШЕ\n\nДля каждой найденной ошибки покажи пример того, что менеджер мог бы сказать именно в этой ситуации.\n\nИспользуй реальные слова клиента из разговора.\n\nНе пиши общие советы вроде:\n\n\"нужно делать привязки\"\n\nили\n\n\"нужно лучше выявлять потребность\".\n\nПокажи конкретную формулировку, которую можно было использовать в данном разговоре.\n\n══════════════════════════════════════\n\n## РЕКОМЕНДАЦИИ ДЛЯ TEAM LEAD\n\nПредставь, что после этого анализа тимлидер должен провести пятиминутное обучение менеджера.\n\nНапиши:\n\n• какие навыки необходимо разобрать;\n• на чем сделать основной акцент;\n• какие упражнения помогут устранить найденные ошибки.\n\nОценивай только навыки.\n\nНе оценивай человека.\n\n══════════════════════════════════════\n\nВАЖНЫЕ ПРАВИЛА\n\n• Никогда не ставь оценки.\n• Не используй баллы.\n• Не используй проценты.\n• Не используй рейтинги.\n• Не сравнивай менеджеров между собой.\n• Не придумывай ошибки.\n• Не требуй того, чего нет в скрипте продаж.\n• Если этап выполнен хорошо — обязательно это отметь.\n• Если ошибка несущественная — не раздувай ее.\n• Если разговор закончился раньше — анализируй только те этапы, до которых разговор реально дошел.\n• Если какой-либо вывод невозможно сделать по транскрипту — прямо напиши об этом.\n• Главная цель анализа — помочь тимлидеру понять, чему именно необходимо обучить менеджера после этого разговора.\n• Скрипт продаж является единственным эталоном оценки менеджера.\n\nНиже передаются данные для анализа.\n\n========================\nСКРИПТ ПРОДАЖ\n\n{{ $json.content }}\n\n========================\nТРАНСКРИПТ ДИАЛОГА\n\n{{ $json.dialogue }}\n\n========================\n\nПроведи полный анализ разговора согласно всем инструкциям выше.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        304,
+        256
+      ],
+      "id": "8683179b-9cd9-4493-bed0-a464e27d6ab8",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "19dap3ONvxD39_2zk_IN7Xh9lj6dacgLbCU6JRB_ZCdI"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        432
+      ],
+      "id": "b933f8c5-d892-42dc-977d-7b6627156493",
+      "name": "Get a document",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        96,
+        272
+      ],
+      "id": "a3feabe2-1cd1-454f-887e-a495888f744c",
+      "name": "Merge",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.output;\n\nlet formatted = text;\n\n// Главный заголовок\nformatted = \"📞 *РАЗБОР ЗВОНКА*\\n━━━━━━━━━━━━━━━━━━\\n\\n\" + formatted;\n\n// Красивые заголовки\nconst replacements = [\n  [/##\\s*СИЛЬНЫЕ СТОРОНЫ/gi, \"🔥 *СИЛЬНЫЕ СТОРОНЫ*\"],\n  [/##\\s*ЗОНЫ РОСТА/gi, \"📌 *ЗОНЫ РОСТА*\"],\n  [/##\\s*ЧТО МОЖНО БЫЛО СДЕЛАТЬ ЛУЧШЕ/gi, \"💡 *ЧТО МОЖНО БЫЛО СДЕЛАТЬ ЛУЧШЕ*\"],\n  [/##\\s*РЕКОМЕНДАЦИИ ДЛЯ TEAM LEAD/gi, \"🎓 *РЕКОМЕНДАЦИИ ДЛЯ TEAM LEAD*\"],\n  [/##\\s*РЕКОМЕНДАЦИИ ДЛЯ ТИМЛИДА/gi, \"🎓 *РЕКОМЕНДАЦИИ ДЛЯ ТИМЛИДА*\"],\n];\n\nfor (const [regex, value] of replacements) {\n    formatted = formatted.replace(regex, value);\n}\n\n// Маркированные списки\nformatted = formatted.replace(/^\\-\\s/gm, \"• \");\n\n// Лишние пустые строки\nformatted = formatted.replace(/\\n{3,}/g, \"\\n\\n\");\n\n// ---------------------------\n// Разбиваем на сообщения\n// ---------------------------\n\nconst LIMIT = 3800;\nconst result = [];\n\nlet current = \"\";\n\nconst paragraphs = formatted.split(\"\\n\\n\");\n\nfor (const p of paragraphs) {\n\n    if ((current + \"\\n\\n\" + p).length > LIMIT) {\n\n        result.push({\n            json: {\n                telegram: current.trim()\n            }\n        });\n\n        current = p;\n\n    } else {\n\n        current += (current ? \"\\n\\n\" : \"\") + p;\n\n    }\n\n}\n\nif (current.trim()) {\n\n    result.push({\n        json: {\n            telegram: current.trim()\n        }\n    });\n\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        256
+      ],
+      "id": "3be0ffcb-37a9-4147-969e-23e3900c60af",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.telegram }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        816,
+        256
+      ],
+      "id": "d3d104e8-ff6a-49ab-9e6f-5d058eeae56e",
+      "name": "Send a text message",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "MetaQA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "=google/gemma-4-26b-a4b-it:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        176,
+        464
+      ],
+      "id": "a7d8e6b6-3ae6-4a22-8536-e3be78ec43ba",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "",
+          "name": "OpenRouter account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Each 2 min": {
+      "main": [
+        [
+          {
+            "node": "Табл с диалогами",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Deepgram Transcriber",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Табл с диалогами": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deepgram Transcriber": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a document": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": []
+}
