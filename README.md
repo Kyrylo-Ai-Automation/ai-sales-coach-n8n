@@ -50,7 +50,7 @@ flowchart LR
 
 ## Workflow files
 
-The production workflow JSON is not published publicly. I'm happy to walk you through it on a call or adapt it to your stack.
+Workflow JSON exports are in [`workflows/`](workflows). Credentials, IDs and personal data are removed: import into n8n and connect your own credentials.
 
 ## Case study & demo
 
